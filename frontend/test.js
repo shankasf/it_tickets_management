@@ -1,1 +1,1 @@
-const var1 = 'Sagar';
+const var1 = 'Dhulipalla Vidhayini';
