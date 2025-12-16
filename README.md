@@ -63,9 +63,11 @@ There is also an `Activity diagram.png` describing the high‑level flow of the 
 
 ---
 
-## Data Model (PostgreSQL)
+## Data Model (PostgreSQL/Supabase)
 
 Defined in `database/schema.py` and initialized via `database/connection.py`:
+
+**Note**: This application uses **Supabase** (PostgreSQL-compatible) as the database. The schema is standard PostgreSQL and works seamlessly with Supabase. All SQL statements, enums, tables, and triggers are fully compatible.
 
 - **Enums**
   - `user_role_enum`: `REQUESTER`, `AGENT`, `ADMIN`
@@ -245,25 +247,65 @@ initialization; the rest of the code calls only this wrapper.
 ### Prerequisites
 
 - Python 3.10+ recommended
-- PostgreSQL database accessible from your environment
+- **Supabase** database (recommended) or PostgreSQL database accessible from your environment
 - A valid OpenAI API key (for the current `llm_client.py` implementation)
 
 ### Environment Variables
 
 The project uses `python-dotenv` and expects a `.env` file (or environment) with:
 
-- **Database**
-  - `DB_HOST`
-  - `DB_PORT`
-  - `DB_USER`
-  - `DB_PASSWORD`
-  - `DB_NAME`
+- **Database** (choose one method):
+  - **Option 1: Supabase (Recommended)** - Use connection string
+    - `SUPABASE_DB_URL` or `DATABASE_URL` - Full PostgreSQL connection string from Supabase
+  - **Option 2: Traditional PostgreSQL** - Use individual variables
+    - `DB_HOST`
+    - `DB_PORT`
+    - `DB_USER`
+    - `DB_PASSWORD`
+    - `DB_NAME`
 - **LLM**
   - `OPENAI_API_KEY`
 
-Example `.env` (adjust values as needed):
+#### Supabase Setup (Recommended)
+
+1. **Create a Supabase project** at [supabase.com](https://supabase.com)
+2. **Get your connection string**:
+   - Go to your Supabase project dashboard
+   - Navigate to **Settings** → **Database**
+   - Under **Connection string**, select **URI** or **Connection pooling**
+   - Copy the connection string (it looks like: `postgresql://postgres.xxxxx:[PASSWORD]@aws-0-us-west-1.pooler.supabase.com:6543/postgres`)
+3. **Add to `.env`**:
 
 ```env
+# Supabase connection string (recommended)
+SUPABASE_DB_URL=postgresql://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+
+# Or use DATABASE_URL (also supported)
+# DATABASE_URL=postgresql://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+
+OPENAI_API_KEY=sk-...
+```
+
+**Note**: Replace `[YOUR_PASSWORD]` with your actual Supabase database password. The connection string automatically handles SSL requirements.
+
+**Important**: If your password contains special characters (like `@`, `#`, `%`, etc.), you must URL-encode them:
+- `@` becomes `%40`
+- `#` becomes `%23`
+- `%` becomes `%25`
+- `/` becomes `%2F`
+- etc.
+
+Example: If your password is `p@ss#word`, the connection string should be:
+```
+SUPABASE_DB_URL=postgresql://postgres.xxxxx:p%40ss%23word@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+```
+
+#### Traditional PostgreSQL Setup
+
+If you're using a traditional PostgreSQL database instead of Supabase:
+
+```env
+# Traditional PostgreSQL connection
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
@@ -272,6 +314,8 @@ DB_NAME=helpdesk_db
 
 OPENAI_API_KEY=sk-...
 ```
+
+The application automatically detects which method you're using and connects accordingly.
 
 ### Install Python Dependencies
 
@@ -287,6 +331,8 @@ pip install -r requirements.txt
 
 ## Initializing and Seeding the Database
 
+### For Supabase Users
+
 1. **Test DB connection and initialize schema**
 
    You can use the helpers in `database/connection.py`:
@@ -294,12 +340,53 @@ pip install -r requirements.txt
    - `test_connection()` – verifies that the connection is valid
    - `init_database(drop_existing=False)` – creates enums, tables, indexes, triggers
 
+   **Important for Supabase**: The schema initialization will create all tables, enums, and indexes. Supabase's PostgreSQL is fully compatible, so no modifications are needed.
+
 2. **Seed reference and demo data**
 
    Run `database/seed_data.py` as a script to populate teams, users, categories,
-   SLA policies, tickets, comments, and audit events.
+   SLA policies, tickets, comments, and audit events:
+
+   ```bash
+   python -m database.seed_data
+   ```
+
+   Or from the project root:
+   ```bash
+   python database/seed_data.py
+   ```
 
 This gives you a realistic dataset for demoing the chatbot and exploring metrics.
+
+**Note**: The connection module automatically handles Supabase's SSL requirements and connection pooling. All existing database operations (in `ticket_service.py`, `seed_data.py`, etc.) work without modification.
+
+### Troubleshooting Connection Issues
+
+If you're having trouble connecting to Supabase:
+
+1. **Test the connection**:
+   ```bash
+   python -m database.connection
+   ```
+   This will test the connection and provide detailed error messages.
+
+2. **Common issues**:
+   - **SSL errors**: Make sure your connection string includes SSL parameters. The code automatically adds `?sslmode=require` if not present.
+   - **Password encoding**: If your password has special characters, URL-encode them (see above).
+   - **Wrong connection string**: Make sure you're using the **Connection pooling** or **URI** connection string from Supabase dashboard, not the Session mode string.
+   - **Network/firewall**: Ensure your network allows connections to Supabase (port 6543 for pooling, 5432 for direct).
+
+3. **Verify your connection string format**:
+   - Should start with `postgresql://` or `postgres://`
+   - Should include your project reference ID
+   - Should include the correct port (6543 for pooling, 5432 for direct)
+   - Should end with `/postgres` (the default database name)
+
+4. **Check environment variables**:
+   ```bash
+   # Make sure your .env file is being loaded
+   python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('SUPABASE_DB_URL:', 'SET' if os.getenv('SUPABASE_DB_URL') else 'NOT SET')"
+   ```
 
 ---
 
@@ -343,10 +430,35 @@ be made in the agent and service layers without touching the frontend.
 
 ---
 
+## Migration from PostgreSQL to Supabase
+
+This application has been migrated to support **Supabase** (PostgreSQL-compatible) while maintaining backward compatibility with traditional PostgreSQL databases.
+
+### What Changed
+
+- **`database/connection.py`**: Updated to support Supabase connection strings (`SUPABASE_DB_URL` or `DATABASE_URL`) while maintaining support for individual PostgreSQL environment variables
+- **Schema**: No changes needed - Supabase uses PostgreSQL, so all existing schema statements work as-is
+- **All services**: No code changes required - `ticket_service.py`, `seed_data.py`, and all other services continue to work without modification
+
+### Migration Steps
+
+1. **Create a Supabase project** and get your connection string
+2. **Update your `.env` file** to use `SUPABASE_DB_URL` instead of individual `DB_*` variables
+3. **Re-run schema initialization** and seed data (if needed)
+4. **That's it!** The application will automatically detect and use Supabase
+
+The connection module automatically handles:
+- SSL requirements (Supabase requires SSL)
+- Connection string parsing
+- Backward compatibility with traditional PostgreSQL setups
+
+---
+
 ## Notes
 
 - Attachments are stored on disk under `uploads/` with metadata in the database.
 - Role‑based status transitions and validations are enforced in `services/ticket_service.py`.
 - Logging is enabled across services and the seed script to help with debugging and demos.
+- **Database**: The application now supports both Supabase (recommended) and traditional PostgreSQL databases.
 
 

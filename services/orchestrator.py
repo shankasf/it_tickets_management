@@ -31,6 +31,7 @@ from services.agents.status_agent import status_agent
 from services.agents.triage_agent import triage_agent
 from services.agents.ops_analytics_agent import ops_analytics_agent
 from services.agents.router_agent import run_router
+from llm_client import llm_complete
 
 # Per-user conversation memory (process-local)
 _USER_HISTORY: Dict[int, List[Dict[str, str]]] = {}
@@ -123,6 +124,46 @@ def _role_allows_intent(role: str, intent: str) -> bool:
         return role == "ADMIN"
     # small_talk or unknown fallback is fine
     return True
+
+
+async def _is_help_or_capabilities_question(user_message: str) -> bool:
+    """
+    Use LLM to intelligently detect if the user is asking about their capabilities,
+    what they can do, or how to use the system.
+    """
+    system_prompt = (
+        "You are a classifier for an IT helpdesk chatbot.\n"
+        "Determine if the user is asking about:\n"
+        "- Their capabilities or permissions\n"
+        "- What they can do with the system\n"
+        "- How to use the tool\n"
+        "- What features are available to them\n"
+        "- Help or documentation about their access\n\n"
+        "Respond with ONLY 'yes' if it's a help/capabilities question, or 'no' otherwise.\n"
+        "Examples of YES: 'what can I do?', 'show me my permissions', 'how do I use this?', 'what am I allowed to do?', 'help me understand my access'\n"
+        "Examples of NO: 'create a ticket', 'what's the status?', 'hello', 'thanks'"
+    )
+    
+    try:
+        response = llm_complete(
+            system_prompt=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+            model="gpt-4o-mini",
+            temperature=0.1,
+            max_tokens=10,
+        )
+        result = (response.get("content", "") or "").strip().lower()
+        return result.startswith("yes")
+    except Exception as e:
+        logger.warning(f"Error detecting help question, falling back to keyword matching: {e}")
+        # Fallback to keyword matching if LLM fails
+        lower_msg = user_message.lower()
+        help_keywords = [
+            "what can", "capabilities", "permissions", "access", "features",
+            "help me understand", "how do i", "what am i", "show me my",
+            "what are my", "what can this", "how to use", "manual", "guide"
+        ]
+        return any(keyword in lower_msg for keyword in help_keywords)
 
 
 async def _run_agent(agent, prompt: str) -> str:
@@ -252,11 +293,51 @@ async def orchestrate_turn(
             else:
                 reply = "I don't have an earlier message from you."
         else:
-            reply = (
-                "I'm your IT helpdesk assistant. "
-                "You can describe a new issue, ask about a ticket's status, "
-                "or, if you're an agent/admin, ask for triage help or metrics."
-            )
+            # Intelligently detect if this is a help/capabilities question using LLM
+            is_help_question = await _is_help_or_capabilities_question(user_message)
+            
+            if is_help_question:
+                # Provide role-specific help manual
+                if state.role == "REQUESTER":
+                    reply = (
+                        "As a **Requester**, you can:\n\n"
+                        "1. **Create new tickets** - Describe an issue (e.g., 'I can't connect to WiFi') and I'll help you create a ticket.\n"
+                        "2. **Check ticket status** - Ask 'What's the status of my ticket?' or 'Show me ticket #123'.\n"
+                        "3. **Add information** - Provide updates to existing tickets with more details or attachments.\n"
+                        "4. **Close/Reopen tickets** - Close your RESOLVED tickets or reopen CLOSED ones if needed.\n\n"
+                        "Try: 'I need help with VPN' or 'What's the status of my last ticket?'"
+                    )
+                elif state.role == "AGENT":
+                    reply = (
+                        "As an **Agent**, you can do everything a Requester can, plus:\n\n"
+                        "1. **Triage tickets** - Ask 'Help me triage ticket #123' or 'Assign ticket #10 to the Network Team'.\n"
+                        "2. **Update ticket status** - Move tickets through: NEW → TRIAGED → IN_PROGRESS → RESOLVED.\n"
+                        "3. **Add internal notes** - Comments visible only to agents/admins.\n"
+                        "4. **Update priority and assignee** - Change priority levels and assign tickets to team members.\n"
+                        "5. **View ticket lists** - Ask 'Show me all P1 tickets' or 'What tickets are assigned to me?'\n\n"
+                        "Try: 'Help me triage ticket #5' or 'Show me all NEW tickets'"
+                    )
+                elif state.role == "ADMIN":
+                    reply = (
+                        "As an **Admin**, you have full access:\n\n"
+                        "1. **Everything Agents can do** - All ticket management, triage, and updates.\n"
+                        "2. **View analytics and metrics** - Ask 'How many P1 tickets are open?' or 'Show tickets by category'.\n"
+                        "3. **Override any status** - Bypass normal status transition rules when needed.\n"
+                        "4. **Full system access** - View all tickets, metrics, and system data.\n\n"
+                        "Try: 'Show me ticket metrics' or 'How many tickets are in each status?'"
+                    )
+                else:
+                    reply = (
+                        "I'm your IT helpdesk assistant. "
+                        "You can describe a new issue, ask about a ticket's status, "
+                        "or, if you're an agent/admin, ask for triage help or metrics."
+                    )
+            else:
+                reply = (
+                    "I'm your IT helpdesk assistant. "
+                    "You can describe a new issue, ask about a ticket's status, "
+                    "or, if you're an agent/admin, ask for triage help or metrics."
+                )
         state.history.append({"role": "user", "content": user_message})
         state.history.append({"role": "assistant", "content": reply})
         return reply, state
