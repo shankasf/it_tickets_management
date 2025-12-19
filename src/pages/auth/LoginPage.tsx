@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import type { FormEvent} from "react";
+import { useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import type { UserRole } from "../../types/auth";
