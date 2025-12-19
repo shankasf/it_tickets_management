@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "../../components/layout/Layout";
 import { LoginPage } from "../../pages/auth/LoginPage";
@@ -15,6 +16,7 @@ import { MyTicketsPage } from "../../pages/tickets/MyTicketsPage";
 import { NotFoundPage } from "../../pages/NotFoundPage";
 import { RequireAuth } from "./RequireAuth";
 import { RequireRole } from "./RequireRole";
+import Giga from '../../pages/Giga/giga';
 
 export function AppRouter() {
   return (
@@ -25,6 +27,7 @@ export function AppRouter() {
           <Route element={<Layout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="giga" element={<Giga />} />
             <Route path="tickets">
               <Route index element={<TicketsPage />} />
               <Route path="new" element={<NewTicketPage />} />
@@ -34,6 +37,7 @@ export function AppRouter() {
             <Route element={<RequireRole allowed={["agent", "admin"]} />}>
               <Route path="reports" element={<ReportsPage />} />
             </Route>
+            <Route path="Giga" element={<Giga/>} />
             <Route element={<RequireRole allowed={["admin"]} />}>
               <Route path="admin" element={<AdminLandingPage />} />
               <Route path="admin/users" element={<AdminUsersPage />} />
@@ -43,6 +47,7 @@ export function AppRouter() {
             </Route>
             <Route path="*" element={<NotFoundPage />} />
           </Route>
+          
         </Route>
       </Routes>
     </BrowserRouter>

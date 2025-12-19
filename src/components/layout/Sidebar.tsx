@@ -5,7 +5,8 @@ const mainLinks = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/tickets", label: "Tickets" },
   { to: "/my-tickets", label: "My Tickets" },
-  { to: "/reports", label: "Reports" }
+  { to: "/reports", label: "Reports" },
+   { to: "/Giga", label: "Giga" }
 ];
 
 const adminLinks = [
