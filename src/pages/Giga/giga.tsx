@@ -1,214 +1,201 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
 
-const HollywoodGiga: React.FC = () => {
-  const [listening, setListening] = useState(false);
+export default function GigaAudioSphere() {
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const [started, setStarted] = useState(false);
+  const [energy, setEnergy] = useState(0);
+  const [speaking, setSpeaking] = useState(false);
+  const [ripples, setRipples] = useState<number[]>([]);
+  const [hue, setHue] = useState(0);
+
+  /* 🎤 START MIC — USER ACTION REQUIRED */
+  const startMic = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const ctx = new AudioContext();
+    await ctx.resume();
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+
+    const src = ctx.createMediaStreamSource(stream);
+    src.connect(analyser);
+
+    audioCtxRef.current = ctx;
+    analyserRef.current = analyser;
+    setStarted(true);
+  };
+
+  /* 🔁 AUDIO LOOP */
+  useEffect(() => {
+    if (!started || !analyserRef.current) return;
+
+    const analyser = analyserRef.current;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    const loop = () => {
+      analyser.getByteFrequencyData(data);
+
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i];
+      const avg = sum / data.length;
+
+      const isSpeaking = avg > 22; // 🎯 real voice threshold
+      const e = isSpeaking ? avg / 255 : 0;
+
+      setSpeaking(isSpeaking);
+      setEnergy(e);
+
+      // 🌊 spawn ripples only when speaking
+      if (isSpeaking && Math.random() > 0.75) {
+        setRipples((r) => [...r, Date.now()]);
+      }
+
+      // 🎨 color shift always alive
+      setHue((h) => (h + 0.8) % 360);
+
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    loop();
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [started]);
 
   return (
-    <div style={styles.appWrapper}>
-      {/* 1. CINEMATIC BACKGROUND LAYERS */}
-      <div style={styles.mainContent}>
-        {/* Dynamic Light Rays / Beams */}
-        <div style={{
-          ...styles.lightBeams,
-          opacity: listening ? 0.4 : 0.1,
-        }} />
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events
+    <div style={styles.container} onClick={!started ? startMic : undefined}>
+      {!started && (
+        <div style={styles.tap}>
+          Tap to enable microphone
+        </div>
+      )}
 
-        {/* High-Visibility Cinematic Mountains */}
-        <div style={styles.mountainLayer} />
+      {/* 🌊 MULTIPLE RIPPLE WAVES */}
+      {ripples.map((id) => (
+        <div
+          key={id}
+          style={{
+            ...styles.ripple,
+            borderColor: `hsl(${hue},100%,60%)`,
+          }}
+          onAnimationEnd={() =>
+            setRipples((r) => r.filter((x) => x !== id))
+          }
+        />
+      ))}
 
-        {/* Global Atmosphere Glow */}
-        <div style={{
-          ...styles.atmosphere,
-          opacity: listening ? 0.7 : 0.3,
-        }} />
-
-        {/* 2. THE HOLLYWOOD SPHERE (Bottom Right) */}
-        <div style={styles.spherePosition}>
-          <button
-            onClick={() => setListening(!listening)}
-            style={styles.sphereButton}
-          >
-            {/* Effect: Cinematic Lens Flare */}
-            <div style={{
-              ...styles.lensFlare,
-              opacity: listening ? 0.8 : 0.2,
-              transform: listening ? 'translate(-50%, -50%) scale(1.3)' : 'translate(-50%, -50%) scale(1)',
-            }} />
-
-            {/* Effect: Outer Nebula Glow */}
-            <div style={styles.nebulaGlow} />
-
-            {/* The Main High-End Sphere */}
-            <div style={{
-              ...styles.sphereCore,
-              animation: 'liquidCycle 12s infinite linear, floating 5s infinite ease-in-out',
-            }}>
-              {/* Internal 3D Rim & Refractions */}
-              <div style={styles.rimLight} />
-              <div style={styles.topGloss} />
-              
-              {/* Dynamic Inner Glow */}
-              <div style={styles.innerCoreGlow} />
-
-              {/* Centered Voice Visualizer */}
-              <div style={styles.bars}>
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    style={{
-                      ...styles.bar,
-                      animation: listening ? `wave 0.5s ${i * 0.1}s infinite` : 'none',
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </button>
+      {/* 🔮 SPHERE */}
+      <div
+        style={{
+          ...styles.sphere,
+          background: `radial-gradient(circle at 30% 30%, 
+            hsl(${hue},100%,65%), #020202)`,
+          transform: `scale(${1 + energy * 0.18})`,
+          boxShadow: `
+            0 0 ${40 + energy * 120}px hsl(${hue},100%,60%),
+            inset 0 0 ${30 + energy * 80}px hsl(${hue},100%,60%)
+          `,
+        }}
+      >
+        {/* 🎶 3 VOICE LINES */}
+        <div style={styles.lines}>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              style={{
+                ...styles.line,
+                height: speaking ? 22 + energy * 80 : 18,
+                background: `hsl(${hue},100%,70%)`,
+                animation: speaking ? "pulse 0.7s ease-in-out infinite" : "none",
+              }}
+            />
+          ))}
         </div>
       </div>
-
-      <style>{animations}</style>
     </div>
   );
-};
+}
 
-export default HollywoodGiga;
+/* 🎨 STYLES */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const styles: any = {
+  container: {
+    height: "100vh",
+    background: "#020202",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    overflow: "hidden",
+    cursor: "pointer",
+  },
 
-/* ================= STYLES ================= */
-
-const styles: Record<string, React.CSSProperties> = {
-  appWrapper: {
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: '#000',
-    overflow: 'hidden',
-    position: 'fixed',
-    inset: 0,
-    margin: 0,
-  },
-  mainContent: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-    display: 'flex',
-  },
-  lightBeams: {
-    position: 'absolute',
-    inset: 0,
-    background: 'repeating-conic-gradient(from 0deg at 85% 85%, transparent 0deg, rgba(255,100,0,0.05) 10deg, transparent 20deg)',
-    filter: 'blur(30px)',
-    zIndex: 1,
-    transition: 'opacity 2s ease',
-  },
-  mountainLayer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '100%',
-    height: '60vh',
-    backgroundImage: 'url("https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1920&q=80")',
-    backgroundSize: 'cover',
-    backgroundPosition: 'bottom center',
-    filter: 'brightness(0.6) contrast(1.5) saturate(0.5)',
-    zIndex: 2,
-  },
-  atmosphere: {
-    position: 'absolute',
-    inset: 0,
-    background: 'radial-gradient(circle at 85% 85%, rgba(255, 60, 0, 0.15) 0%, transparent 65%)',
-    zIndex: 3,
-    transition: 'opacity 1s ease',
-  },
-  spherePosition: {
-    position: 'absolute',
-    bottom: '70px',
-    right: '100px',
+  tap: {
+    position: "absolute",
+    color: "#fff",
+    fontSize: 18,
+    opacity: 0.6,
     zIndex: 10,
   },
-  sphereButton: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    position: 'relative',
-    outline: 'none',
+
+  sphere: {
+    width: 240,
+    height: 240,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "transform 0.08s linear",
+    zIndex: 3,
   },
-  lensFlare: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: '600px',
-    height: '600px',
-    background: 'radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, rgba(255, 100, 0, 0.05) 40%, transparent 70%)',
-    filter: 'blur(40px)',
-    zIndex: -1,
-    transition: 'transform 0.8s ease, opacity 0.8s ease',
+
+  lines: {
+    display: "flex",
+    gap: 14,
+    alignItems: "flex-end",
   },
-  nebulaGlow: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '400px',
-    height: '400px',
-    background: 'radial-gradient(circle, rgba(255, 40, 0, 0.3) 0%, transparent 75%)',
-    filter: 'blur(60px)',
-    zIndex: -1,
+
+  line: {
+    width: 6,
+    borderRadius: 6,
+    transition: "height 0.1s linear",
   },
-  sphereCore: {
-    width: '300px',
-    height: '300px',
-    borderRadius: '50%',
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 50px 100px rgba(0,0,0,0.9), inset 0 0 50px rgba(0,0,0,0.5)',
-    overflow: 'hidden',
-  },
-  rimLight: {
-    position: 'absolute',
-    inset: 0,
-    borderRadius: '50%',
-    border: '1.5px solid rgba(255,255,255,0.25)',
-    boxShadow: 'inset 10px 10px 30px rgba(255,255,255,0.15), inset -10px -10px 30px rgba(0,0,0,0.8)',
-  },
-  topGloss: {
-    position: 'absolute',
-    top: '5%',
-    left: '15%',
-    width: '50%',
-    height: '25%',
-    background: 'linear-gradient(to bottom, rgba(255,255,255,0.3), transparent)',
-    borderRadius: '50%',
-    transform: 'rotate(-15deg)',
-    filter: 'blur(1px)',
-  },
-  innerCoreGlow: {
-    position: 'absolute',
-    width: '80%',
-    height: '80%',
-    background: 'radial-gradient(circle at center, rgba(255,255,255,0.1) 0%, transparent 80%)',
+
+  ripple: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: "50%",
+    border: "3px solid",
+    animation: "ripple 1.4s ease-out forwards",
+    filter: "blur(2px)",
     zIndex: 1,
   },
-  bars: { display: 'flex', gap: '8px', zIndex: 5 },
-  bar: { width: '6px', height: '24px', backgroundColor: '#fff', borderRadius: '4px', boxShadow: '0 0 10px rgba(255,255,255,0.5)' },
 };
 
-const animations = `
-@keyframes wave {
-  0%, 100% { height: 20px; opacity: 0.7; transform: translateY(0); }
-  50% { height: 80px; opacity: 1; transform: translateY(-5px); }
+/* 🔁 ANIMATIONS */
+const style = document.createElement("style");
+style.innerHTML = `
+@keyframes pulse {
+  0%,100% { transform: scaleY(0.6); }
+  50% { transform: scaleY(1.6); }
 }
 
-@keyframes liquidCycle {
-  0%   { background: #ff4d00; }
-  33%  { background: #ff1f5a; }
-  66%  { background: #ff8c00; }
-  100% { background: #ff4d00; }
-}
-
-@keyframes floating {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-15px) scale(1.02); }
+@keyframes ripple {
+  from {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
 }
 `;
+document.head.appendChild(style);
