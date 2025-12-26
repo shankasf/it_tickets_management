@@ -11,7 +11,7 @@ export default function GigaAudioSphere() {
   const [ripples, setRipples] = useState<number[]>([]);
   const [hue, setHue] = useState(0);
 
-  /* 🎤 START MIC — USER ACTION REQUIRED */
+  
   const startMic = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -29,7 +29,7 @@ export default function GigaAudioSphere() {
     setStarted(true);
   };
 
-  /* 🔁 AUDIO LOOP */
+  
   useEffect(() => {
     if (!started || !analyserRef.current) return;
 
@@ -49,12 +49,11 @@ export default function GigaAudioSphere() {
       setSpeaking(isSpeaking);
       setEnergy(e);
 
-      // 🌊 spawn ripples only when speaking
+    
       if (isSpeaking && Math.random() > 0.75) {
         setRipples((r) => [...r, Date.now()]);
       }
 
-      // 🎨 color shift always alive
       setHue((h) => (h + 0.8) % 360);
 
       rafRef.current = requestAnimationFrame(loop);
@@ -76,7 +75,7 @@ export default function GigaAudioSphere() {
         </div>
       )}
 
-      {/* 🌊 MULTIPLE RIPPLE WAVES */}
+      
       {ripples.map((id) => (
         <div
           key={id}
@@ -90,7 +89,7 @@ export default function GigaAudioSphere() {
         />
       ))}
 
-      {/* 🔮 SPHERE */}
+ 
       <div
         style={{
           ...styles.sphere,
@@ -103,7 +102,7 @@ export default function GigaAudioSphere() {
           `,
         }}
       >
-        {/* 🎶 3 VOICE LINES */}
+        
         <div style={styles.lines}>
           {[0, 1, 2].map((i) => (
             <div
@@ -122,7 +121,7 @@ export default function GigaAudioSphere() {
   );
 }
 
-/* 🎨 STYLES */
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const styles: any = {
   container: {
@@ -179,7 +178,7 @@ const styles: any = {
   },
 };
 
-/* 🔁 ANIMATIONS */
+
 const style = document.createElement("style");
 style.innerHTML = `
 @keyframes pulse {
